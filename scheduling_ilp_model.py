@@ -93,28 +93,7 @@ class IncrementalPersonnelScheduler:
                        if self.availability_matrix.get((person_id, shift_idx), False))
             available_days[person_id] = max(count, 1)  # Avoid division by zero
         return available_days
-    
-    def _get_capacity_factor(self, person_id: int) -> float:
-        """Get capacity factor using Person object."""
-        return self.data.get_person(person_id).capacity_factor
-    
-    def _are_shifts_too_close(self, shift_idx1: int, shift_idx2: int) -> bool:
-        """Check if shifts are too close using Shift objects."""
-        if shift_idx1 == shift_idx2:
-            return False
-        shift1 = self.data.get_shift(shift_idx1)
-        shift2 = self.data.get_shift(shift_idx2)
-        days_apart = abs((shift1.date - shift2.date).days)
-        return days_apart < self.min_days_between_shifts
-    
-    def _is_male(self, person_id: int) -> bool:
-        """Check if person is male using Person object."""
-        return self.data.get_person(person_id).male
-    
-    def _is_fluent_pt(self, person_id: int) -> bool:
-        """Check if person is fluent in Portuguese using Person object."""
-        return self.data.get_person(person_id).fluent_pt
-    
+            
     def build_model(self):
         """Build the incremental ILP model for the new shift only."""
         self.prob = pulp.LpProblem("Incremental_Personnel_Scheduling", pulp.LpMinimize)
@@ -159,7 +138,7 @@ class IncrementalPersonnelScheduler:
         female_persons = [
             self.x_vars[person_id]
             for person_id in self.data.person_ids
-            if person_id in self.x_vars and not self._is_male(person_id)
+            if person_id in self.x_vars and not self.data.get_person(person_id).male
         ]
         if female_persons:
             self.prob += pulp.lpSum(female_persons) >= 1, "AtLeastOneFemalePerNewShift"
@@ -168,7 +147,7 @@ class IncrementalPersonnelScheduler:
         pt_speakers = [
             self.x_vars[person_id]
             for person_id in self.data.person_ids
-            if person_id in self.x_vars and self._is_fluent_pt(person_id)
+            if person_id in self.x_vars and self.data.get_person(person_id).fluent_pt
         ]
         if pt_speakers:
             self.prob += pulp.lpSum(pt_speakers) >= 1, "AtLeastOnePtSpeakerPerNewShift"
@@ -182,7 +161,7 @@ class IncrementalPersonnelScheduler:
         # Calculate total weighted availability for fair share calculation
         total_weighted_availability = 0
         for person_id in self.data.person_ids:
-            capacity_factor = self._get_capacity_factor(person_id)
+            capacity_factor = self.data.get_person(person_id).capacity_factor
             # For fairness calculation, consider if person is available for new shift
             is_available_for_new = (self._is_person_available_for_new_shift(person_id) and 
                                    not self._violates_minimum_days_constraint(person_id))
@@ -190,7 +169,7 @@ class IncrementalPersonnelScheduler:
             total_weighted_availability += capacity_factor * availability_weight
         
         for person_id in self.data.person_ids:
-            capacity_factor = self._get_capacity_factor(person_id)
+            capacity_factor = self.data.get_person(person_id).capacity_factor
             
             # Calculate person's availability weight
             is_available_for_new = (self._is_person_available_for_new_shift(person_id) and 

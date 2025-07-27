@@ -1,14 +1,16 @@
 """
-Personnel Scheduling Integer Linear Program (ILP)
-================================================
+Incremental Personnel Scheduling Integer Linear Program (ILP)
+============================================================
 
-This module implements a fair personnel scheduling system as an ILP that:
-1. Minimizes variance in assignments (normalized by availability and capacity)
-2. Respects availability constraints
-3. Enforces minimum days between shifts for the same person (default: 7 days)
-4. Ensures exactly two people per shift
-5. Ensures at least one female per shift
-6. Ensures at least one Portuguese-fluent person per shift
+This module implements an incremental personnel scheduling system as an ILP that:
+1. Takes an existing schedule as fixed constraints
+2. Optimally assigns personnel to ONE new shift
+3. Minimizes variance in total assignments (existing + new)
+4. Respects availability constraints
+5. Enforces minimum days between shifts for the same person (default: 7 days)
+6. Ensures exactly two people per new shift
+7. Ensures at least one female per new shift
+8. Ensures at least one Portuguese-fluent person per new shift
 """
 
 import pulp
@@ -19,29 +21,59 @@ import numpy as np
 from models import Person, Shift, ScheduleData
 
 
-class PersonnelSchedulingILP:
-    def __init__(self, data_file: str, min_days_between_shifts: int = 7):
-        """Initialize the scheduling ILP with data from JSON file.
+class IncrementalPersonnelScheduler:
+    def __init__(self, data_file: str, new_shift_date: str, min_days_between_shifts: int = 7):
+        """Initialize the incremental scheduling ILP with data from JSON file.
         
         Args:
-            data_file: Path to JSON file containing people and shift data
+            data_file: Path to JSON file containing people and existing shift data
+            new_shift_date: ISO date string for the new shift to be scheduled (e.g., "2025-01-12")
             min_days_between_shifts: Minimum number of days required between shifts for the same person
         """
-        # Use the new data model
+        # Use the existing data model
         self.data = ScheduleData(data_file)
+        
+        # The new shift we're scheduling for
+        self.new_shift_date = datetime.fromisoformat(new_shift_date)
+        self.new_shift = Shift(date=self.new_shift_date)
         
         # Configuration parameters
         self.min_days_between_shifts = min_days_between_shifts
         
-        # Create availability matrix using new data model
-        self.availability_matrix = self._build_availability_matrix()
+        # Parse existing assignments to understand current state
+        self.existing_assignment_counts = self._calculate_existing_assignment_counts()
         
         # Initialize the optimization problem
         self.prob = None
-        self.x_vars = {}  # Decision variables
-        self.y_vars = {}  # Assignment count variables
+        self.x_vars = {}  # Decision variables (only for new shift)
         self.z_plus_vars = {}  # Positive deviation variables for fairness
         self.z_minus_vars = {}  # Negative deviation variables for fairness
+        
+    def _calculate_existing_assignment_counts(self) -> Dict[int, int]:
+        """Calculate how many shifts each person is already assigned to."""
+        assignment_counts = {person_id: 0 for person_id in self.data.person_ids}
+        
+        for shift_assignments in self.data.existing_assignments:
+            for person_id in shift_assignments:
+                if person_id in assignment_counts:
+                    assignment_counts[person_id] += 1
+        
+        return assignment_counts
+    
+    def _is_person_available_for_new_shift(self, person_id: int) -> bool:
+        """Check if person is available for the new shift date."""
+        person = self.data.get_person(person_id)
+        return person.is_available_on_date(self.new_shift_date)
+    
+    def _violates_minimum_days_constraint(self, person_id: int) -> bool:
+        """Check if assigning person to new shift would violate minimum days constraint."""
+        for shift_idx, shift_assignments in enumerate(self.data.existing_assignments):
+            if person_id in shift_assignments:
+                existing_shift = self.data.get_shift(shift_idx)
+                days_apart = abs((self.new_shift_date - existing_shift.date).days)
+                if days_apart < self.min_days_between_shifts:
+                    return True
+        return False
         
     def _build_availability_matrix(self) -> Dict[Tuple[int, int], bool]:
         """Build availability matrix using Person objects: (person_id, shift_index) -> is_available"""
@@ -84,23 +116,19 @@ class PersonnelSchedulingILP:
         return self.data.get_person(person_id).fluent_pt
     
     def build_model(self):
-        """Build the complete ILP model using new data model."""
-        self.prob = pulp.LpProblem("Personnel_Scheduling", pulp.LpMinimize)
+        """Build the incremental ILP model for the new shift only."""
+        self.prob = pulp.LpProblem("Incremental_Personnel_Scheduling", pulp.LpMinimize)
         
-        # Decision Variables
-        # x[i,j] = 1 if person i is assigned to shift j, 0 otherwise
+        # Decision Variables - ONLY for the new shift
+        # x[i] = 1 if person i is assigned to the new shift, 0 otherwise
         self.x_vars = {}
         for person_id in self.data.person_ids:
-            for shift_idx in self.data.shift_indices:
-                if self.availability_matrix.get((person_id, shift_idx), False):
-                    self.x_vars[(person_id, shift_idx)] = pulp.LpVariable(
-                        f"x_{person_id}_{shift_idx}", cat='Binary'
-                    )
-        
-        # y[i] = total number of assignments for person i
-        self.y_vars = {}
-        for person_id in self.data.person_ids:
-            self.y_vars[person_id] = pulp.LpVariable(f"y_{person_id}", lowBound=0, cat='Integer')
+            # Check if person is available and doesn't violate minimum days constraint
+            if (self._is_person_available_for_new_shift(person_id) and 
+                not self._violates_minimum_days_constraint(person_id)):
+                self.x_vars[person_id] = pulp.LpVariable(
+                    f"x_{person_id}_new_shift", cat='Binary'
+                )
         
         # z+[i] and z-[i] = positive and negative deviations from fair share for person i
         self.z_plus_vars = {}
@@ -116,94 +144,80 @@ class PersonnelSchedulingILP:
         self._set_objective()
     
     def _add_constraints(self):
-        """Add all constraints to the model using new data model."""
+        """Add constraints for the incremental scheduling of the new shift."""
         
-        # Constraint 1: Exactly two people per shift
-        for shift_idx in self.data.shift_indices:
-            available_persons = [
-                self.x_vars[(person_id, shift_idx)] 
-                for person_id in self.data.person_ids 
-                if (person_id, shift_idx) in self.x_vars
-            ]
-            if available_persons:
-                self.prob += pulp.lpSum(available_persons) == 2, f"TwoPeoplePerShift_{shift_idx}"
+        # Constraint 1: Exactly two people for the new shift
+        available_persons = [
+            self.x_vars[person_id] 
+            for person_id in self.data.person_ids 
+            if person_id in self.x_vars
+        ]
+        if available_persons:
+            self.prob += pulp.lpSum(available_persons) == 2, "TwoPeoplePerNewShift"
         
-        # Constraint 2: At least one female per shift
-        for shift_idx in self.data.shift_indices:
-            female_persons = [
-                self.x_vars[(person_id, shift_idx)]
-                for person_id in self.data.person_ids
-                if (person_id, shift_idx) in self.x_vars and not self._is_male(person_id)
-            ]
-            if female_persons:
-                self.prob += pulp.lpSum(female_persons) >= 1, f"AtLeastOneFemalePerShift_{shift_idx}"
+        # Constraint 2: At least one female for the new shift
+        female_persons = [
+            self.x_vars[person_id]
+            for person_id in self.data.person_ids
+            if person_id in self.x_vars and not self._is_male(person_id)
+        ]
+        if female_persons:
+            self.prob += pulp.lpSum(female_persons) >= 1, "AtLeastOneFemalePerNewShift"
         
-        # Constraint 3: At least one Portuguese speaker per shift
-        for shift_idx in self.data.shift_indices:
-            pt_speakers = [
-                self.x_vars[(person_id, shift_idx)]
-                for person_id in self.data.person_ids
-                if (person_id, shift_idx) in self.x_vars and self._is_fluent_pt(person_id)
-            ]
-            if pt_speakers:
-                self.prob += pulp.lpSum(pt_speakers) >= 1, f"AtLeastOnePtSpeakerPerShift_{shift_idx}"
+        # Constraint 3: At least one Portuguese speaker for the new shift
+        pt_speakers = [
+            self.x_vars[person_id]
+            for person_id in self.data.person_ids
+            if person_id in self.x_vars and self._is_fluent_pt(person_id)
+        ]
+        if pt_speakers:
+            self.prob += pulp.lpSum(pt_speakers) >= 1, "AtLeastOnePtSpeakerPerNewShift"
         
-        # Constraint 4: Minimum days between shifts for the same person
+        # Constraint 4: Define fairness deviations based on total assignments (existing + new)
+        # Calculate expected fair share including the new shift
+        total_existing_shifts = len(self.data.shifts)
+        total_shifts_including_new = total_existing_shifts + 1
+        total_positions = total_shifts_including_new * 2  # 2 people per shift
+        
+        # Calculate total weighted availability for fair share calculation
+        total_weighted_availability = 0
         for person_id in self.data.person_ids:
-            for shift_idx1 in self.data.shift_indices:
-                for shift_idx2 in self.data.shift_indices:
-                    if (self._are_shifts_too_close(shift_idx1, shift_idx2) and
-                        (person_id, shift_idx1) in self.x_vars and
-                        (person_id, shift_idx2) in self.x_vars):
-                        self.prob += (
-                            self.x_vars[(person_id, shift_idx1)] + 
-                            self.x_vars[(person_id, shift_idx2)] <= 1
-                        ), f"MinDaysBetweenShifts_{person_id}_{shift_idx1}_{shift_idx2}"
-        
-        # Constraint 5: Count total assignments for each person
-        for person_id in self.data.person_ids:
-            assignments = [
-                self.x_vars[(person_id, shift_idx)]
-                for shift_idx in self.data.shift_indices
-                if (person_id, shift_idx) in self.x_vars
-            ]
-            if assignments:
-                self.prob += (
-                    self.y_vars[person_id] == pulp.lpSum(assignments)
-                ), f"CountAssignments_{person_id}"
-            else:
-                self.prob += self.y_vars[person_id] == 0, f"CountAssignments_{person_id}"
-        
-        # Constraint 6: Define fairness deviations
-        # Calculate expected fair share for each person (accounting for 2 people per shift)
-        available_days = self._calculate_available_days_count()
-        total_shifts = len(self.data.shift_indices)
-        total_positions = total_shifts * 2  # 2 people per shift
+            capacity_factor = self._get_capacity_factor(person_id)
+            # For fairness calculation, consider if person is available for new shift
+            is_available_for_new = (self._is_person_available_for_new_shift(person_id) and 
+                                   not self._violates_minimum_days_constraint(person_id))
+            availability_weight = (total_existing_shifts + (1 if is_available_for_new else 0))
+            total_weighted_availability += capacity_factor * availability_weight
         
         for person_id in self.data.person_ids:
             capacity_factor = self._get_capacity_factor(person_id)
-            available_days_count = available_days[person_id]
             
-            # Fair share = (total_positions * capacity_factor * available_days) / 
-            #              sum(capacity_factor * available_days for all persons)
-            total_weighted_availability = sum(
-                self._get_capacity_factor(pid) * available_days[pid] 
-                for pid in self.data.person_ids
-            )
+            # Calculate person's availability weight
+            is_available_for_new = (self._is_person_available_for_new_shift(person_id) and 
+                                   not self._violates_minimum_days_constraint(person_id))
+            availability_weight = (total_existing_shifts + (1 if is_available_for_new else 0))
             
+            # Fair share calculation
             if total_weighted_availability > 0:
-                fair_share = (total_positions * capacity_factor * available_days_count) / total_weighted_availability
+                fair_share = (total_positions * capacity_factor * availability_weight) / total_weighted_availability
             else:
                 fair_share = 0
             
-            # Normalized assignment ratio = actual_assignments / available_days
-            # Normalized fair share = fair_share / available_days
-            normalized_fair_share = fair_share / available_days_count if available_days_count > 0 else 0
+            # Normalized fair share
+            normalized_fair_share = fair_share / availability_weight if availability_weight > 0 else 0
             
-            # z+[i] - z-[i] = (y[i] / available_days[i]) - normalized_fair_share
+            # Total assignments = existing assignments + new assignment (if any)
+            existing_assignments = self.existing_assignment_counts[person_id]
+            new_assignment = self.x_vars.get(person_id, 0)  # 0 if person not available for new shift
+            total_assignments = existing_assignments + new_assignment
+            
+            # Normalized total assignments
+            normalized_total_assignments = total_assignments / availability_weight if availability_weight > 0 else 0
+            
+            # z+[i] - z-[i] = normalized_total_assignments - normalized_fair_share
             self.prob += (
                 self.z_plus_vars[person_id] - self.z_minus_vars[person_id] ==
-                self.y_vars[person_id] / available_days_count - normalized_fair_share
+                normalized_total_assignments - normalized_fair_share
             ), f"FairnessDeviation_{person_id}"
     
     def _set_objective(self):
@@ -235,38 +249,43 @@ class PersonnelSchedulingILP:
         return pulp.LpStatus[self.prob.status]
     
     def get_solution(self) -> Dict:
-        """Get the solution from the solved model using new data model."""
+        """Get the solution from the solved model for incremental scheduling."""
         if self.prob is None or self.prob.status != pulp.LpStatusOptimal:
             return {"status": "No optimal solution found"}
         
         solution = {
             "status": "Optimal",
             "objective_value": pulp.value(self.prob.objective),
-            "assignments": {},
-            "assignment_counts": {},
+            "new_shift_assignment": [],
+            "existing_assignment_counts": self.existing_assignment_counts.copy(),
+            "total_assignment_counts": {},
             "fairness_metrics": {}
         }
         
-        # Extract assignments using Shift objects
-        for (person_id, shift_idx), var in self.x_vars.items():
+        # Extract assignments for the new shift
+        for person_id, var in self.x_vars.items():
             if pulp.value(var) == 1:
-                shift = self.data.get_shift(shift_idx)
-                shift_date = shift.date_str
-                if shift_date not in solution["assignments"]:
-                    solution["assignments"][shift_date] = []
-                solution["assignments"][shift_date].append(person_id)
+                solution["new_shift_assignment"].append(person_id)
         
-        # Extract assignment counts
-        for person_id, var in self.y_vars.items():
-            solution["assignment_counts"][person_id] = pulp.value(var)
+        # Calculate total assignment counts (existing + new)
+        for person_id in self.data.person_ids:
+            existing_count = self.existing_assignment_counts[person_id]
+            new_count = 1 if person_id in solution["new_shift_assignment"] else 0
+            solution["total_assignment_counts"][person_id] = existing_count + new_count
         
         # Extract fairness metrics
-        available_days = self._calculate_available_days_count()
         for person_id in self.data.person_ids:
+            total_existing_shifts = len(self.data.shifts)
+            is_available_for_new = (self._is_person_available_for_new_shift(person_id) and 
+                                   not self._violates_minimum_days_constraint(person_id))
+            availability_weight = (total_existing_shifts + (1 if is_available_for_new else 0))
+            
             solution["fairness_metrics"][person_id] = {
-                "assignments": pulp.value(self.y_vars[person_id]),
-                "available_days": available_days[person_id],
-                "normalized_assignments": pulp.value(self.y_vars[person_id]) / available_days[person_id] if available_days[person_id] > 0 else 0,
+                "existing_assignments": self.existing_assignment_counts[person_id],
+                "new_assignment": 1 if person_id in solution["new_shift_assignment"] else 0,
+                "total_assignments": solution["total_assignment_counts"][person_id],
+                "availability_weight": availability_weight,
+                "normalized_total_assignments": solution["total_assignment_counts"][person_id] / availability_weight if availability_weight > 0 else 0,
                 "positive_deviation": pulp.value(self.z_plus_vars[person_id]),
                 "negative_deviation": pulp.value(self.z_minus_vars[person_id])
             }
@@ -274,51 +293,54 @@ class PersonnelSchedulingILP:
         return solution
     
     def print_model_summary(self):
-        """Print a summary of the model structure using new data model."""
-        print("=== Personnel Scheduling ILP Model Summary ===")
+        """Print a summary of the incremental scheduling model."""
+        print("=== Incremental Personnel Scheduling Model Summary ===")
         print(f"Number of people: {len(self.data.person_ids)}")
-        print(f"Number of shifts: {len(self.data.shift_indices)}")
+        print(f"Number of existing shifts: {len(self.data.shifts)}")
+        print(f"New shift date: {self.new_shift.date_str}")
         print(f"Number of decision variables: {len(self.x_vars)}")
         print(f"Minimum days between shifts: {self.min_days_between_shifts}")
         
-        print("\nShift Dates:")
+        print("\nExisting Shift Dates:")
         for shift_idx, shift in enumerate(self.data.shifts):
             print(f"  Shift {shift_idx}: {shift.date_str}")
         
-        print("\nDetailed Availability Matrix:")
-        # Dynamic column headers based on actual number of shifts
-        header = "Person ID"
-        for shift_idx in self.data.shift_indices:
-            header += f" | Shift {shift_idx}"
-        print(header)
-        print("-" * len(header))
+        print("\nExisting Assignment Counts:")
+        for person_id, count in self.existing_assignment_counts.items():
+            person = self.data.people.get(person_id)
+            person_name = person.name if person else f"Person {person_id}"
+            print(f"  {person_name}: {count} assignments")
+        
+        print(f"\nEligibility for New Shift ({self.new_shift.date_str}):")
+        print("Person ID | Name                | Available | Min Days OK | Eligible")
+        print("-" * 70)
         
         for person_id in self.data.person_ids:
-            availability_row = [f"    {person_id:2d}    "]
-            for shift_idx in self.data.shift_indices:
-                is_available = self.availability_matrix.get((person_id, shift_idx), False)
-                availability_row.append(f"   {'✓' if is_available else '✗'}     ")
-            print("|".join(availability_row))
+            person = self.data.people.get(person_id)
+            person_name = person.name if person else f"Person {person_id}"
+            
+            is_available = self._is_person_available_for_new_shift(person_id)
+            min_days_ok = not self._violates_minimum_days_constraint(person_id)
+            is_eligible = person_id in self.x_vars
+            
+            print(f"    {person_id:2d}    | {person_name:19s} | {'✓' if is_available else '✗':9s} | {'✓' if min_days_ok else '✗':11s} | {'✓' if is_eligible else '✗'}")
         
         print("\nDecision Variables Created:")
-        for (person_id, shift_idx) in sorted(self.x_vars.keys()):
-            shift = self.data.get_shift(shift_idx)
-            print(f"  x_{person_id}_{shift_idx} (Person {person_id}, {shift.date_str})")
+        for person_id in sorted(self.x_vars.keys()):
+            person = self.data.people.get(person_id)
+            person_name = person.name if person else f"Person {person_id}"
+            print(f"  x_{person_id}_new_shift ({person_name})")
         
         print("\nCapacity Factors:")
         for person_id, person in self.data.people.items():
-            print(f"Person {person_id} ({person.name}): {person.capacity_factor}")
-        
-        available_days = self._calculate_available_days_count()
-        print("\nAvailable Days Count:")
-        for person_id, count in available_days.items():
-            print(f"Person {person_id}: {count} days")
+            print(f"  {person.name}: {person.capacity_factor}")
 
 
 def main():
-    """Example usage of the PersonnelSchedulingILP class."""
-    # Initialize the model with 1 day minimum between shifts (due to limited example data)
-    scheduler = PersonnelSchedulingILP('database.json', min_days_between_shifts=1)
+    """Example usage of the IncrementalPersonnelScheduler class."""
+    # Initialize the model with a new shift date and 1 day minimum between shifts
+    new_shift_date = "2025-01-12"  # New shift to be scheduled
+    scheduler = IncrementalPersonnelScheduler('database.json', new_shift_date, min_days_between_shifts=1)
     
     # Build the model first
     scheduler.build_model()
@@ -336,29 +358,35 @@ def main():
     if solution["status"] == "Optimal":
         print(f"\nObjective Value (Total Fairness Deviation): {solution['objective_value']:.4f}")
         
-        print("\n=== Optimal Schedule ===")
-        for shift_date, assigned_persons in sorted(solution["assignments"].items()):
+        print(f"\n=== Optimal Assignment for New Shift ({new_shift_date}) ===")
+        if solution["new_shift_assignment"]:
             person_names = []
-            for person_id in assigned_persons:
+            for person_id in solution["new_shift_assignment"]:
                 person = scheduler.data.people.get(person_id)
                 if person:
                     person_names.append(person.name)
-            print(f"{shift_date}: {', '.join(person_names)} (ID: {assigned_persons})")
+            print(f"{new_shift_date}: {', '.join(person_names)} (ID: {solution['new_shift_assignment']})")
+        else:
+            print(f"{new_shift_date}: No assignment found")
         
-        print("\n=== Assignment Counts ===")
-        for person_id, count in solution["assignment_counts"].items():
+        print("\n=== Total Assignment Counts (Existing + New) ===")
+        for person_id, count in solution["total_assignment_counts"].items():
             person = scheduler.data.people.get(person_id)
             person_name = person.name if person else f"Person {person_id}"
-            print(f"{person_name}: {count} assignments")
+            existing = solution["existing_assignment_counts"][person_id]
+            new = 1 if person_id in solution["new_shift_assignment"] else 0
+            print(f"{person_name}: {existing} + {new} = {count} assignments")
         
         print("\n=== Fairness Metrics ===")
         for person_id, metrics in solution["fairness_metrics"].items():
             person = scheduler.data.people.get(person_id)
             person_name = person.name if person else f"Person {person_id}"
             print(f"{person_name}:")
-            print(f"  - Assignments: {metrics['assignments']}")
-            print(f"  - Available Days: {metrics['available_days']}")
-            print(f"  - Normalized Assignment Rate: {metrics['normalized_assignments']:.4f}")
+            print(f"  - Existing Assignments: {metrics['existing_assignments']}")
+            print(f"  - New Assignment: {metrics['new_assignment']}")
+            print(f"  - Total Assignments: {metrics['total_assignments']}")
+            print(f"  - Availability Weight: {metrics['availability_weight']}")
+            print(f"  - Normalized Total: {metrics['normalized_total_assignments']:.4f}")
             print(f"  - Deviation: +{metrics['positive_deviation']:.4f}, -{metrics['negative_deviation']:.4f}")
     else:
         print("No optimal solution found!")

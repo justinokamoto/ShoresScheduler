@@ -5,28 +5,48 @@
             "male": true,
             "fluent_pt": false,
             "capacity_factor": 1.0,
-            "unavailable": []
+            "unavailable": [
+                {
+                    "start": null,
+                    "end": "2025-01-01"
+                }
+            ]
         },
         "2": {
             "name": "Thabata Okamoto",
             "male": false,
             "fluent_pt": true,
             "capacity_factor": 1.0,
-            "unavailable": []
+            "unavailable": [
+                {
+                    "start": null,
+                    "end": "2025-01-01"
+                }
+            ]
         },
         "3": {
             "name": "Larissa Garcia",
             "male": false,
             "fluent_pt": true,
             "capacity_factor": 1.0,
-            "unavailable": []
+            "unavailable": [
+                {
+                    "start": null,
+                    "end": "2025-01-01"
+                }
+            ]
         },
         "4": {
             "name": "Carlos Santos",
             "male": true,
             "fluent_pt": true,
             "capacity_factor": 1.0,
-            "unavailable": []
+            "unavailable": [
+                {
+                    "start": null,
+                    "end": "2025-01-01"
+                }
+            ]
         },
         "5": {
             "name": "Ana Silva",
@@ -34,6 +54,10 @@
             "fluent_pt": true,
             "capacity_factor": 1.0,
             "unavailable": [
+                {
+                    "start": null,
+                    "end": "2025-01-01"
+                },
                 {
                     "start": "2025-01-04",
                     "end": "2025-01-06"
@@ -46,6 +70,10 @@
             "fluent_pt": false,
             "capacity_factor": 0.8,
             "unavailable": [
+                {
+                    "start": null,
+                    "end": "2025-01-01"
+                },
                 {
                     "start": "2025-01-02",
                     "end": "2025-01-02"

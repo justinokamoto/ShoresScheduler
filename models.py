@@ -8,7 +8,7 @@ in the personnel scheduling system: Person, Shift, and ScheduleData.
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict
 
 
@@ -117,6 +117,74 @@ class ScheduleData:
                 return shift
         raise ValueError(f"No shift found for date {date}")
     
+    def add_scheduled_shift(self, shift_date: datetime, person_ids: List[int]):
+        """Add a new scheduled shift with assigned persons."""
+        # Validate person IDs exist
+        for person_id in person_ids:
+            if person_id not in self.people:
+                raise ValueError(f"Person ID {person_id} does not exist")
+        
+        # Create and add the new shift
+        new_shift = Shift(date=shift_date)
+        self.shifts.append(new_shift)
+        
+        # Add the assignment for this new shift
+        self.existing_assignments.append(person_ids.copy())
+    
+    def block_availability(self, person_id: int, start_date: datetime, end_date: datetime):
+        """Block a person's availability for a given date range."""
+        if person_id not in self.people:
+            raise ValueError(f"Person ID {person_id} does not exist")
+        
+        if start_date > end_date:
+            raise ValueError("Start date cannot be after end date")
+        
+        # Add the unavailable period
+        unavailable_period = {
+            'start': start_date.isoformat(),
+            'end': end_date.isoformat()
+        }
+        
+        self.people[person_id].unavailable_periods.append(unavailable_period)
+    
+    def clear_availability(self, person_id: int, start_date: datetime, end_date: datetime):
+        """Clear a person's unavailable periods within a given date range."""
+        if person_id not in self.people:
+            raise ValueError(f"Person ID {person_id} does not exist")
+        
+        if start_date > end_date:
+            raise ValueError("Start date cannot be after end date")
+        
+        person = self.people[person_id]
+        updated_periods = []
+        
+        for period in person.unavailable_periods:
+            period_start = datetime.fromisoformat(period['start']) if period.get('start') else datetime.min
+            period_end = datetime.fromisoformat(period['end']) if period.get('end') else datetime.max
+            
+            # Check if period overlaps with the clearing range
+            if period_end < start_date or period_start > end_date:
+                # No overlap, keep the period as is
+                updated_periods.append(period)
+            else:
+                # There is overlap, we need to handle partial overlap
+                if period_start < start_date:
+                    # Keep the part before the clearing range
+                    updated_periods.append({
+                        'start': period['start'],
+                        'end': (start_date - timedelta(microseconds=1)).isoformat()
+                    })
+                
+                if period_end > end_date:
+                    # Keep the part after the clearing range
+                    updated_periods.append({
+                        'start': (end_date + timedelta(microseconds=1)).isoformat(),
+                        'end': period['end']
+                    })
+                # The overlapping part is removed (not added to updated_periods)
+        
+        person.unavailable_periods = updated_periods
+
     def save_data(self, data_file: str):
         """Save current schedule data to JSON file."""
         # Convert people to dict format

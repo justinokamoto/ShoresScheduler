@@ -8,7 +8,7 @@ This module implements an incremental personnel scheduling system as an ILP that
 3. Minimizes variance in total assignments (existing + new)
 4. Respects availability constraints
 5. Enforces minimum days between shifts for the same person (default: 7 days)
-6. Ensures exactly two people per new shift
+6. Ensures the specified number of people per new shift (configurable, default: 2)
 7. Ensures at least one female per new shift
 8. Ensures at least one Portuguese-fluent person per new shift
 """
@@ -22,13 +22,14 @@ from models import Person, Shift, ScheduleData
 
 
 class IncrementalPersonnelScheduler:
-    def __init__(self, data_file: str, new_shift_date: str, min_days_between_shifts: int = 7):
+    def __init__(self, data_file: str, new_shift_date: str, min_days_between_shifts: int = 7, people_needed: int = 2):
         """Initialize the incremental scheduling ILP with data from JSON file.
         
         Args:
             data_file: Path to JSON file containing people and existing shift data
             new_shift_date: ISO date string for the new shift to be scheduled (e.g., "2025-01-12")
             min_days_between_shifts: Minimum number of days required between shifts for the same person
+            people_needed: Number of people needed for the shift
         """
         # Use the existing data model
         self.data = ScheduleData(data_file)
@@ -39,6 +40,7 @@ class IncrementalPersonnelScheduler:
         
         # Configuration parameters
         self.min_days_between_shifts = min_days_between_shifts
+        self.people_needed = people_needed
         
         # Parse existing assignments to understand current state
         self.existing_assignment_counts = self._calculate_existing_assignment_counts()
@@ -125,14 +127,14 @@ class IncrementalPersonnelScheduler:
     def _add_constraints(self):
         """Add constraints for the incremental scheduling of the new shift."""
         
-        # Constraint 1: Exactly two people for the new shift
+        # Constraint 1: Required number of people for the new shift
         available_persons = [
             self.x_vars[person_id] 
             for person_id in self.data.person_ids 
             if person_id in self.x_vars
         ]
         if available_persons:
-            self.prob += pulp.lpSum(available_persons) == 2, "TwoPeoplePerNewShift"
+            self.prob += pulp.lpSum(available_persons) == self.people_needed, "RequiredPeoplePerNewShift"
         
         # Constraint 2: At least one female for the new shift
         female_persons = [
@@ -156,7 +158,8 @@ class IncrementalPersonnelScheduler:
         # Calculate expected fair share including the new shift
         total_existing_shifts = len(self.data.shifts)
         total_shifts_including_new = total_existing_shifts + 1
-        total_positions = total_shifts_including_new * 2  # 2 people per shift
+        # Calculate total positions assuming existing shifts had 2 people, new shift has people_needed
+        total_positions = total_existing_shifts * 2 + self.people_needed
         
         # Calculate total weighted availability for fair share calculation
         total_weighted_availability = 0
@@ -277,6 +280,7 @@ class IncrementalPersonnelScheduler:
         print(f"Number of people: {len(self.data.person_ids)}")
         print(f"Number of existing shifts: {len(self.data.shifts)}")
         print(f"New shift date: {self.new_shift.date_str}")
+        print(f"People needed for new shift: {self.people_needed}")
         print(f"Number of decision variables: {len(self.x_vars)}")
         print(f"Minimum days between shifts: {self.min_days_between_shifts}")
         

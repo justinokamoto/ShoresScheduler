@@ -19,8 +19,9 @@ def main():
         epilog="""
 Examples:
   %(prog)s 2025-01-15
-  %(prog)s 2025-01-15 --database custom_database.json
-  %(prog)s 2025-01-15 --database custom_database.json --min-days 14
+  %(prog)s 2025-01-15 --people-needed 3
+  %(prog)s 2025-01-15 --database custom_database.json --people-needed 4
+  %(prog)s 2025-01-15 --database custom_database.json --min-days 14 --people-needed 2
         """
     )
     
@@ -44,6 +45,13 @@ Examples:
         help='Minimum number of days required between shifts for the same person. Default: 30'
     )
     
+    parser.add_argument(
+        '--people-needed',
+        type=int,
+        default=2,
+        help='Number of people needed for the shift. Default: 2'
+    )
+    
     # Parse arguments
     args = parser.parse_args()
     
@@ -53,18 +61,24 @@ Examples:
     except ValueError:
         parser.error(f"Invalid shift date format: {args.shift_date}. Use YYYY-MM-DD format.")
     
+    # Validate people_needed parameter
+    if args.people_needed < 1:
+        parser.error(f"Number of people needed must be at least 1, got: {args.people_needed}")
+    
     # Initialize the scheduler with parsed arguments
     print(f"Initializing scheduler with:")
     print(f"  Database file: {args.database}")
     print(f"  New shift date: {args.shift_date}")
     print(f"  Minimum days between shifts: {args.min_days}")
+    print(f"  People needed for shift: {args.people_needed}")
     print()
     
     try:
         scheduler = IncrementalPersonnelScheduler(
             args.database, 
             args.shift_date, 
-            min_days_between_shifts=args.min_days
+            min_days_between_shifts=args.min_days,
+            people_needed=args.people_needed
         )
         
         # Build the model first

@@ -7,7 +7,7 @@ using the Integer Linear Program (ILP) model defined in scheduling_ilp_model.py.
 """
 
 import argparse
-from datetime import datetime
+from datetime import date
 from scheduling_ilp_model import IncrementalPersonnelScheduler
 import stats
 
@@ -58,7 +58,7 @@ Examples:
     
     # Validate shift date format
     try:
-        datetime.fromisoformat(args.shift_date)
+        date.fromisoformat(args.shift_date)
     except ValueError:
         parser.error(f"Invalid shift date format: {args.shift_date}. Use YYYY-MM-DD format.")
     

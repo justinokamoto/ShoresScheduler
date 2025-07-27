@@ -8,8 +8,8 @@ in the personnel scheduling system: Person, Shift, and ScheduleData.
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from typing import List, Dict
+from datetime import date, timedelta
+from typing import List, Dict, Optional
 
 
 @dataclass
@@ -17,20 +17,20 @@ class Person:
     """Represents a person who can be assigned to shifts."""
     id: int
     name: str
-    male: bool = True
-    fluent_pt: bool = False
+    male: bool = False
+    fluent_pt: bool = True
     capacity_factor: float = 1.0
-    unavailable_periods: List[Dict[str, str]] = field(default_factory=list)
+    unavailable_periods: List[Dict[str, Optional[str]]] = field(default_factory=list)
     
-    def is_available_on_date(self, date: datetime) -> bool:
+    def is_available_on_date(self, date: date) -> bool:
         """Check if person is available on a specific date."""
         for period in self.unavailable_periods:
-            start_date = datetime.fromisoformat(period['start']) if period.get('start') else datetime.min
-            end_date = datetime.fromisoformat(period['end']) if period.get('end') else datetime.max
+            start_date = date.fromisoformat(period['start']) if period.get('start') else date.min
+            end_date = date.fromisoformat(period['end']) if period.get('end') else date.max
             if start_date <= date <= end_date:
                 return False
         return True
-    
+
     @property
     def is_female(self) -> bool:
         """Check if person is female."""
@@ -48,7 +48,7 @@ class Person:
             unavailable_periods=data.get('unavailable', [])
         )
     
-    def block_availability(self, start_date: datetime, end_date: datetime):
+    def block_availability(self, start_date: date, end_date: date):
         """Block this person's availability for a given date range."""
         if start_date > end_date:
             raise ValueError("Start date cannot be after end date")
@@ -61,7 +61,7 @@ class Person:
         
         self.unavailable_periods.append(unavailable_period)
     
-    def clear_availability(self, start_date: datetime, end_date: datetime):
+    def clear_availability(self, start_date: date, end_date: date):
         """Clear this person's unavailable periods within a given date range."""
         if start_date > end_date:
             raise ValueError("Start date cannot be after end date")
@@ -69,8 +69,8 @@ class Person:
         updated_periods = []
         
         for period in self.unavailable_periods:
-            period_start = datetime.fromisoformat(period['start']) if period.get('start') else datetime.min
-            period_end = datetime.fromisoformat(period['end']) if period.get('end') else datetime.max
+            period_start = date.fromisoformat(period['start']) if period.get('start') else date.min
+            period_end = date.fromisoformat(period['end']) if period.get('end') else date.max
             
             # Check if period overlaps with the clearing range
             if period_end < start_date or period_start > end_date:
@@ -99,7 +99,7 @@ class Person:
 @dataclass
 class Shift:
     """Represents a shift that needs to be staffed."""
-    date: datetime
+    date: date
     
     @property
     def date_str(self) -> str:
@@ -109,7 +109,7 @@ class Shift:
     @classmethod
     def from_date_string(cls, date_str: str) -> 'Shift':
         """Create Shift from ISO date string."""
-        return cls(date=datetime.fromisoformat(date_str))
+        return cls(date=date.fromisoformat(date_str))
 
 
 class ScheduleData:
@@ -156,14 +156,14 @@ class ScheduleData:
         """Get shift by index."""
         return self.shifts[shift_index]
     
-    def get_shift_by_date(self, date: datetime) -> Shift:
+    def get_shift_by_date(self, date: date) -> Shift:
         """Get shift by date."""
         for shift in self.shifts:
             if shift.date == date:
                 return shift
         raise ValueError(f"No shift found for date {date}")
     
-    def add_scheduled_shift(self, shift_date: datetime, person_ids: List[int]):
+    def add_scheduled_shift(self, shift_date: date, person_ids: List[int]):
         """Add a new scheduled shift with assigned persons."""
         # Validate person IDs exist
         for person_id in person_ids:

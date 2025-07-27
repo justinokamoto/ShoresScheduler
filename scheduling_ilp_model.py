@@ -14,7 +14,7 @@ This module implements an incremental personnel scheduling system as an ILP that
 """
 
 import pulp
-from datetime import datetime, timedelta
+from datetime import date, timedelta
 from typing import Dict, List, Tuple, Set
 import numpy as np
 
@@ -35,7 +35,7 @@ class IncrementalPersonnelScheduler:
         self.data = ScheduleData(data_file)
         
         # The new shift we're scheduling for
-        self.new_shift_date = datetime.fromisoformat(new_shift_date)
+        self.new_shift_date = date.fromisoformat(new_shift_date)
         self.new_shift = Shift(date=self.new_shift_date)
         
         # Configuration parameters

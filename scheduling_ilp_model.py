@@ -48,8 +48,8 @@ class PersonnelSchedulingILP:
         availability = {}
         
         for person_id, person in self.data.people.items():
-            for shift in self.data.shifts:
-                availability[(person_id, shift.index)] = person.is_available_on_date(shift.date)
+            for shift_idx, shift in enumerate(self.data.shifts):
+                availability[(person_id, shift_idx)] = person.is_available_on_date(shift.date)
         
         return availability
     
@@ -282,8 +282,8 @@ class PersonnelSchedulingILP:
         print(f"Minimum days between shifts: {self.min_days_between_shifts}")
         
         print("\nShift Dates:")
-        for shift in self.data.shifts:
-            print(f"  Shift {shift.index}: {shift.date_str}")
+        for shift_idx, shift in enumerate(self.data.shifts):
+            print(f"  Shift {shift_idx}: {shift.date_str}")
         
         print("\nDetailed Availability Matrix:")
         # Dynamic column headers based on actual number of shifts

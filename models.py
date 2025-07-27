@@ -52,7 +52,6 @@ class Person:
 @dataclass
 class Shift:
     """Represents a shift that needs to be staffed."""
-    index: int
     date: datetime
     
     @property
@@ -61,9 +60,9 @@ class Shift:
         return self.date.isoformat()
     
     @classmethod
-    def from_date_string(cls, index: int, date_str: str) -> 'Shift':
+    def from_date_string(cls, date_str: str) -> 'Shift':
         """Create Shift from ISO date string."""
-        return cls(index=index, date=datetime.fromisoformat(date_str))
+        return cls(date=datetime.fromisoformat(date_str))
 
 
 class ScheduleData:
@@ -87,8 +86,8 @@ class ScheduleData:
             self.people[person_id] = Person.from_dict(person_id, person_data)
         
         # Load shifts
-        for idx, shift_date_str in enumerate(data['shifts']):
-            self.shifts.append(Shift.from_date_string(idx, shift_date_str))
+        for shift_date_str in data['shifts']:
+            self.shifts.append(Shift.from_date_string(shift_date_str))
         
         # Load existing assignments
         self.existing_assignments = data.get('scheduled', [])
@@ -101,7 +100,7 @@ class ScheduleData:
     @property
     def shift_indices(self) -> List[int]:
         """Get list of all shift indices."""
-        return [shift.index for shift in self.shifts]
+        return list(range(len(self.shifts)))
     
     def get_person(self, person_id: int) -> Person:
         """Get person by ID."""

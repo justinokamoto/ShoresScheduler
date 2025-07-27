@@ -9,6 +9,7 @@ using the Integer Linear Program (ILP) model defined in scheduling_ilp_model.py.
 import argparse
 from datetime import datetime
 from scheduling_ilp_model import IncrementalPersonnelScheduler
+import stats
 
 
 def main():
@@ -85,7 +86,7 @@ Examples:
         scheduler.build_model()
         
         # Print model summary
-        scheduler.print_model_summary()
+        stats.print_model_summary(scheduler)
         
         # Solve the model
         print("\n=== Solving Model ===")
@@ -93,7 +94,7 @@ Examples:
         print(f"Solution Status: {status}")
         
         # Get and display solution
-        solution = scheduler.get_solution()
+        solution = stats.get_solution(scheduler)
         if solution["status"] == "Optimal":
             print(f"\nObjective Value (Total Fairness Deviation): {solution['objective_value']:.4f}")
             

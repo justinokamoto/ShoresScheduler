@@ -128,8 +128,7 @@ class ScheduleData:
             data = json.load(f)
         
         # Load people
-        for person_id_str, person_data in data['people'].items():
-            person_id = int(person_id_str)
+        for person_id, person_data in enumerate(data['people']):
             self.people[person_id] = Person.from_dict(person_id, person_data)
         
         # Load shifts
@@ -180,16 +179,17 @@ class ScheduleData:
     
     def save_data(self, data_file: str):
         """Save current schedule data to JSON file."""
-        # Convert people to dict format
-        people_data = {}
-        for person_id, person in self.people.items():
-            people_data[str(person_id)] = {
+        # Convert people to array format
+        people_data = []
+        for person_id in sorted(self.people.keys()):
+            person = self.people[person_id]
+            people_data.append({
                 'name': person.name,
                 'male': person.male,
                 'fluent_pt': person.fluent_pt,
                 'capacity_factor': person.capacity_factor,
                 'unavailable': person.unavailable_periods
-            }
+            })
         
         # Convert shifts to list of date strings
         shifts_data = [shift.date_str for shift in self.shifts]

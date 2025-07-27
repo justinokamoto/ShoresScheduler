@@ -1,6 +1,6 @@
 {
-    "people": {
-        "1": {
+    "people": [
+        {
             "name": "Justin Okamoto",
             "male": true,
             "fluent_pt": false,
@@ -12,7 +12,7 @@
                 }
             ]
         },
-        "2": {
+        {
             "name": "Thabata Okamoto",
             "male": false,
             "fluent_pt": true,
@@ -24,7 +24,7 @@
                 }
             ]
         },
-        "3": {
+        {
             "name": "Larissa Garcia",
             "male": false,
             "fluent_pt": true,
@@ -36,7 +36,7 @@
                 }
             ]
         },
-        "4": {
+        {
             "name": "Carlos Santos",
             "male": true,
             "fluent_pt": true,
@@ -48,7 +48,7 @@
                 }
             ]
         },
-        "5": {
+        {
             "name": "Ana Silva",
             "male": false,
             "fluent_pt": true,
@@ -64,7 +64,7 @@
                 }
             ]
         },
-        "6": {
+        {
             "name": "Michael Johnson",
             "male": true,
             "fluent_pt": false,
@@ -80,7 +80,7 @@
                 }
             ]
         }
-    },
+    ],
     "shifts": [
         "2025-01-02",
         "2025-01-04",
@@ -89,10 +89,10 @@
         "2025-01-10"
     ],
     "scheduled": [
+        [1, 3],
         [2, 4],
-        [3, 5],
-        [1, 2],
-        [4, 5],
-        [1, 3]
+        [0, 1],
+        [3, 4],
+        [0, 2]
     ]
 }

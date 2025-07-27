@@ -116,3 +116,30 @@ class ScheduleData:
             if shift.date == date:
                 return shift
         raise ValueError(f"No shift found for date {date}")
+    
+    def save_data(self, data_file: str):
+        """Save current schedule data to JSON file."""
+        # Convert people to dict format
+        people_data = {}
+        for person_id, person in self.people.items():
+            people_data[str(person_id)] = {
+                'name': person.name,
+                'male': person.male,
+                'fluent_pt': person.fluent_pt,
+                'capacity_factor': person.capacity_factor,
+                'unavailable': person.unavailable_periods
+            }
+        
+        # Convert shifts to list of date strings
+        shifts_data = [shift.date_str for shift in self.shifts]
+        
+        # Prepare the full data structure
+        data = {
+            'people': people_data,
+            'shifts': shifts_data,
+            'scheduled': self.existing_assignments
+        }
+        
+        # Write to file
+        with open(data_file, 'w') as f:
+            json.dump(data, f, indent=2)

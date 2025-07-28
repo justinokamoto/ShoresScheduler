@@ -229,3 +229,9 @@ class IncrementalPersonnelScheduler:
         
         self.prob.solve(solver)
         return pulp.LpStatus[self.prob.status]
+    def solution(self) -> List[int]:
+        """Return the new shift assignment as an array of person IDs."""
+        assert self.prob, "Model has not been built. Call solve() first."
+        assert self.prob.status == pulp.LpStatusOptimal, f"No optimal solution found. Problem status: {pulp.LpStatus[self.prob.status]}"
+
+        return sorted([person_id for person_id, var in self.x_vars.items() if var.varValue == 1])

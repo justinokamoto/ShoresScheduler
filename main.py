@@ -10,6 +10,7 @@ import argparse
 from datetime import date
 from scheduling_ilp_model import IncrementalPersonnelScheduler
 import stats
+import pulp
 
 
 def main():
@@ -92,45 +93,16 @@ Examples:
         print("\n=== Solving Model ===")
         status = scheduler.solve()
         print(f"Solution Status: {status}")
-        
-        # Get and display solution
-        solution = stats.get_solution(scheduler)
-        if solution["status"] == "Optimal":
-            print(f"\nObjective Value (Total Fairness Deviation): {solution['objective_value']:.4f}")
+
+        if status == pulp.LpStatusOptimal:
+            assigned_ids = scheduler.solution()
             
-            print(f"\n=== Optimal Assignment for New Shift ({args.shift_date}) ===")
-            if solution["new_shift_assignment"]:
-                person_names = []
-                for person_id in solution["new_shift_assignment"]:
-                    person = scheduler.data.people.get(person_id)
-                    if person:
-                        person_names.append(person.name)
-                print(f"{args.shift_date}: {', '.join(person_names)} (ID: {solution['new_shift_assignment']})")
-            else:
-                print(f"{args.shift_date}: No assignment found")
-            
-            print("\n=== Total Assignment Counts (Existing + New) ===")
-            for person_id, count in solution["total_assignment_counts"].items():
-                person = scheduler.data.people.get(person_id)
-                person_name = person.name if person else f"Person {person_id}"
-                existing = solution["existing_assignment_counts"][person_id]
-                new = 1 if person_id in solution["new_shift_assignment"] else 0
-                print(f"{person_name}: {existing} + {new} = {count} assignments")
-            
-            print("\n=== Fairness Metrics ===")
-            for person_id, metrics in solution["fairness_metrics"].items():
-                person = scheduler.data.people.get(person_id)
-                person_name = person.name if person else f"Person {person_id}"
-                print(f"{person_name}:")
-                print(f"  - Existing Assignments: {metrics['existing_assignments']}")
-                print(f"  - New Assignment: {metrics['new_assignment']}")
-                print(f"  - Total Assignments: {metrics['total_assignments']}")
-                print(f"  - Availability Weight: {metrics['availability_weight']}")
-                print(f"  - Normalized Total: {metrics['normalized_total_assignments']:.4f}")
-                print(f"  - Deviation: +{metrics['positive_deviation']:.4f}, -{metrics['negative_deviation']:.4f}")
+            # TODO: Assign shiz
+
+            # Get and display solution
+            stats.print_solution(scheduler)
         else:
             print("No optimal solution found!")
-            print(solution)
             
     except FileNotFoundError:
         print(f"Error: Database file '{args.database}' not found.")

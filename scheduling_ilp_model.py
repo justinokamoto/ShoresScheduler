@@ -228,7 +228,8 @@ class IncrementalPersonnelScheduler:
                     continue
         
         self.prob.solve(solver)
-        return pulp.LpStatus[self.prob.status]
+        return self.prob.status
+    
     def solution(self) -> List[int]:
         """Return the new shift assignment as an array of person IDs."""
         assert self.prob, "Model has not been built. Call solve() first."

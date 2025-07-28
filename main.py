@@ -24,6 +24,8 @@ Examples:
   %(prog)s 2025-01-15 --people-needed 3
   %(prog)s 2025-01-15 --database custom_database.json --people-needed 4
   %(prog)s 2025-01-15 --database custom_database.json --min-days 14 --people-needed 2
+  %(prog)s 2025-01-15 --save
+  %(prog)s 2025-01-15 --save updated_schedule.json
         """
     )
     
@@ -52,6 +54,13 @@ Examples:
         type=int,
         default=2,
         help='Number of people needed for the shift. Default: 2'
+    )
+    
+    parser.add_argument(
+        '--save',
+        nargs='?',
+        const='',
+        help='Save the updated schedule data to database file. Optionally specify an alternative output file.'
     )
     
     # Parse arguments
@@ -95,15 +104,21 @@ Examples:
         print(f"Solution Status: {status}")
 
         if status == pulp.LpStatusOptimal:
-            assigned_ids = scheduler.solution()
-            
-            # TODO: Assign shiz
-
             # Get and display solution
             stats.print_solution(scheduler)
+
+            scheduler.data.add_scheduled_shift(date.fromisoformat(args.shift_date), scheduler.solution())
+            
+            # Handle --save option if provided
+            if args.save is not None:
+
+                # Determine output file
+                output_file = args.database if args.save == '' else args.save
+                scheduler.data.save_data(output_file)
         else:
             print("No optimal solution found!")
-            
+            return 1
+
     except FileNotFoundError:
         print(f"Error: Database file '{args.database}' not found.")
         return 1

@@ -91,7 +91,7 @@ Examples:
             min_days_between_shifts=args.min_days,
             people_needed=args.people_needed
         )
-        
+
         # Build the model first
         scheduler.build_model()
         

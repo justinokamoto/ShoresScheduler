@@ -1,4 +1,9 @@
-# Personnel Scheduling Integer Linear Program (ILP)
+# Shores Scheduler
+
+I'm now in charge of scheduling volunteers and paid workers for kids ministry within Shores of Grace. After realizing how tedious it was to do (and how well it translated to a classic optimization problem) I decided to make a little weekend project
+out of it. Most of this code was written in a few hours, thanks to a very healthy dose of Cline AI. So I take no responsibility for any silliness within the code 😁.
+
+## Summary
 
 This repository contains a complete implementation of a fair personnel scheduling system formulated as an Integer Linear Program (ILP). The system optimizes shift assignments while ensuring fairness, respecting availability constraints, preventing consecutive day assignments, and maintaining gender and language diversity requirements.
 
@@ -6,8 +11,7 @@ This repository contains a complete implementation of a fair personnel schedulin
 
 - **`scheduling_ilp_model.py`** - Main implementation of the PersonnelSchedulingILP class
 - **`mathematical_model_documentation.md`** - Formal mathematical description of the ILP model
-- **`database.json`** - Example input data with personnel and events
-- **`example_usage.py`** - Demonstration of various model features and usage scenarios
+- **`example_database.json`** - Example input data with personnel and events
 - **`README.md`** - This file
 
 ## Key Features
@@ -41,7 +45,7 @@ pip install pulp
 from scheduling_ilp_model import PersonnelSchedulingILP
 
 # Initialize with your data
-scheduler = PersonnelSchedulingILP('database.json')
+scheduler = PersonnelSchedulingILP('example_database.json')
 
 # Build and solve the model
 scheduler.build_model()

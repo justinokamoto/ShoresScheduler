@@ -44,7 +44,7 @@ class Person:
             name=data.get('name', f'Person {person_id}'),
             male=data.get('male', True),
             fluent_pt=data.get('fluent_pt', False),
-            capacity_factor=data.get('capacity_factor', 1.0),
+            capacity_factor=float(data.get('capacity_factor', 1.0)),
             unavailable_periods=data.get('unavailable', [])
         )
     

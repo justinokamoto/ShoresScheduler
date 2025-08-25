@@ -40,7 +40,21 @@ This repository contains a complete implementation of a fair personnel schedulin
 pip install pulp
 ```
 
-### Basic Usage
+### Run Program
+
+To add a shift for the volunteers, run:
+
+```
+python main.py [YYYY-MM-DD] --save
+```
+
+To add a shift for the workers, run:
+
+```
+python main.py [YYYY-MM-DD] --database ../ShoresSchedulerData/db_workers.json --save --min-days 14
+```
+
+### Basic Library Usage
 ```python
 from scheduling_ilp_model import PersonnelSchedulingILP
 
